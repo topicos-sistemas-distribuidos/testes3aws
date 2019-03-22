@@ -1,7 +1,10 @@
 package br.ufc.great.es.tsd.s3.teste;
 
 import java.io.File;
-import java.nio.file.FileSystems;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.URL;
 import java.nio.file.Paths;
 import java.util.List;
 
@@ -10,11 +13,25 @@ import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.Bucket;
+import com.amazonaws.services.s3.model.CannedAccessControlList;
+import com.amazonaws.services.s3.model.ListObjectsV2Result;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectInputStream;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 import br.ufc.great.es.tsd.s3.teste.util.Constantes;
 
+/**
+ * Manipula um buckets no S3
+ * Por padrão, sempre havera pelo menos um bucket setado como o bucket default que sera manipulado
+ * @author armandosoaressousa
+ *
+ */
 public class S3ClientManipulator {
 	//Define as credenciais
 	private BasicAWSCredentials awsCreds;
@@ -22,9 +39,12 @@ public class S3ClientManipulator {
 	//Cria um cliente S3
 	private AmazonS3 s3Client;
 
-	//Define o bucket Principal
+	//Define o bucket Principal (default)
 	private String bucketName;
 
+	/**
+	 * Inicializa o manipulador de buckets com suas credenciais e um client default
+	 */
 	private void init() {
 		this.awsCreds = new BasicAWSCredentials(new Constantes().access_key_id, new Constantes().secret_key_id);
 		
@@ -62,7 +82,21 @@ public class S3ClientManipulator {
 	public List<Bucket> getAllBuckets(){
 		return s3Client.listBuckets();
 	}
+
+	/**
+	 * Retorna todos os objetos de um determinado bucket
+	 * @return Lista de objetos do bucket
+	 */
+	public List<S3ObjectSummary> getObjectsFromBucket(){
+		ListObjectsV2Result result = s3Client.listObjectsV2(bucketName);
+		
+		return result.getObjectSummaries();
+	}
 	
+	/**
+	 * Checa se o bucket passado na inicialização é um bucket valido para ser manipulado
+	 * @return true se o bucket for ok
+	 */
 	public boolean checkIfBucketExists() {
         if (!s3Client.doesBucketExist(bucketName)) {
         	System.out.println("O bucket" + bucketName + " não existe");
@@ -70,22 +104,79 @@ public class S3ClientManipulator {
         }else {
         	return true;
         }
-
 	}
 	
-	public boolean uploadFile(String file_path) {
-		boolean status = false;
-		
-        String key_name = Paths.get(file_path).getFileName().toString();
-        
-        try {
-            s3Client.putObject(bucketName, key_name, new File(file_path));
-            status = true;
-        } catch (AmazonServiceException e) {
-            System.err.println(e.getErrorMessage());
-            status = false;
-        }
-        return status;
+	/**
+	 * Dado um arquivo faz o upload para o bucket setado. Nesse caso o arquivo é exclusivo do grupo de administradores do bucket
+	 * @param file_path nome + path do arquivo 
+	 * @throws AmazonServiceException exception caso algo de errado
+	 */
+	public void uploadFile(String file_path) throws AmazonServiceException{
+        String key_name = Paths.get(file_path).getFileName().toString();        
+        s3Client.putObject(bucketName, key_name, new File(file_path));
 	}
+	
+	/**
+	 * Faz o upload de imagem como um arquivo público do bucket definido na inicializacao
+	 * @param file_path diretorio completo do arquivo + nome da imagem
+	 * @param key_name nome da imagem
+	 * @param content_type tipo do arquivo: image/png, imagem/jpeg, ...
+	 * @throws AmazonServiceException exception caso ocorra algum erro na chamada dos servicos da Amazon
+	 */
+	public void uploadImagePublicFile(String file_path, String key_name, String content_type) throws AmazonServiceException{     
+		PutObjectRequest request = new PutObjectRequest(bucketName, key_name, new File(file_path)).withCannedAcl(CannedAccessControlList.PublicRead);
+		ObjectMetadata metadata = new ObjectMetadata();
+		metadata.setContentType("image/png");
+		metadata.addUserMetadata("x-amz-meta-title", "Imagem");
+		request.setMetadata(metadata);
+		s3Client.putObject(request);
+	}
+
+	/**
+	 * Dado um bucket setado e dado o nome de um arquivo desse bucket,faz o download local desse arquivo
+	 * @param fileName nome do arquivo
+	 * @param pathDestination local de destino do download do arquivo
+	 * @throws AmazonServiceException exception de Servico da Amazon
+	 * @throws FileNotFoundException exception Arquivo
+	 * @throws IOException exception de IO
+	 */
+	public void downloadFile(String fileName, String pathDestination) throws AmazonServiceException, FileNotFoundException, IOException{
+		AmazonS3 s3 = this.getS3Client();
+		S3Object objectFile = s3.getObject(bucketName, fileName);
+		S3ObjectInputStream s3is = objectFile.getObjectContent();
+		FileOutputStream fos = new FileOutputStream(new File(pathDestination+fileName));
+		byte[] read_buf = new byte[1024];
+		int read_len = 0;
+
+		while ((read_len = s3is.read(read_buf)) > 0) {
+			fos.write(read_buf, 0, read_len);
+		}
+		
+		s3is.close();
+		fos.close();
+	}
+	
+	/**
+	 * Recupera o recurso da URL do arquivo do bucket setado
+	 * @param fileName nome do arquivo
+	 * @return url completo do arquivo
+	 */
+	public String getFileResourceURL(String fileName) {
+		AmazonS3Client s3Client = (AmazonS3Client)AmazonS3ClientBuilder.defaultClient();
+		
+		return s3Client.getResourceUrl(this.bucketName, fileName);
+	}
+
+	/**
+	 * Recupera a URL do arquivo passado no bucket setado
+	 * @param fileName nome do arquivo
+	 * @return url do arquivo
+	 */
+	public URL getFileURL(String fileName) {
+		AmazonS3Client s3Client = (AmazonS3Client)AmazonS3ClientBuilder.defaultClient();
+		
+		return s3Client.getUrl(this.bucketName, fileName);
+	}
+
 	
 }
