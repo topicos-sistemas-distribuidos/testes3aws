@@ -16,7 +16,7 @@ import com.amazonaws.services.s3.model.Bucket;
 
 import br.ufc.great.es.tsd.s3.teste.util.Constantes;
 
-public class AppTeste {
+public class AppTesteS3DynamoDB {
 
 	static BasicAWSCredentials awsCreds = new BasicAWSCredentials(new Constantes().access_key_id, new Constantes().secret_key_id);
 
