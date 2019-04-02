@@ -1,6 +1,8 @@
 package br.ufc.great.es.tsd.s3.teste;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -11,6 +13,11 @@ import com.amazonaws.auth.BasicAWSCredentials;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
 import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBAttribute;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBHashKey;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapperConfig;
+import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBTable;
 import com.amazonaws.services.dynamodbv2.document.Item;
 import com.amazonaws.services.dynamodbv2.document.spec.GetItemSpec;
 import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
@@ -31,33 +38,206 @@ public class AppTesteS3DynamoDB {
 	static BasicAWSCredentials awsCreds = new BasicAWSCredentials(new Constantes().access_key_id, new Constantes().secret_key_id);
 	static String table_name = null;
 	
-	public static void main(String[] args) {
-		AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
-				.withRegion(Regions.US_EAST_1)
-				.withCredentials(new AWSStaticCredentialsProvider(awsCreds))
-				.build();
-
-		AmazonDynamoDB ddb = AmazonDynamoDBClientBuilder.standard()
-				.withRegion(Regions.US_EAST_1)
-				.withCredentials(new AWSStaticCredentialsProvider(awsCreds))
-				.build();
-
-		System.out.println("Your Amazon S3 buckets are:");
-		getBucketsFromS3(s3Client);
+	@DynamoDBTable(tableName = "likes")
+	public static class LikesDynamoDB{
+		private Integer id;
+		private String date;
+		private String description;
+		private Integer mylike;
+		private Integer person_id;
+		private Integer post_id;
 		
-		System.out.println("------------------------");
-		System.out.println("Your DynamoDB tables:\n");
-		getTablesFromDynamoDB(ddb);
+        // Partition key
+        @DynamoDBHashKey(attributeName = "id")
+		public Integer getId() {
+			return id;
+		}
+		public void setId(Integer id) {
+			this.id = id;
+		}
 		
-		System.out.println("------------------------");
-		System.out.println("Table description:");
-		getTableDescription(table_name, ddb);	
+        @DynamoDBAttribute(attributeName = "date")
+		public String getDate() {
+			return date;
+		}
+		public void setDate(String date) {
+			this.date = date;
+		}
 		
-		System.out.println("------------------------");
-		System.out.format("Recovering item from Table %s\n", table_name);
-		readItemFromTable(table_name, "cliente_id", "1", ddb);
+		@DynamoDBAttribute(attributeName = "description")
+		public String getDescription() {
+			return description;
+		}
+		public void setDescription(String description) {
+			this.description = description;
+		}
+		
+		@DynamoDBAttribute(attributeName = "mylike")
+		public Integer getMylike() {
+			return mylike;
+		}
+		public void setMylike(Integer mylike) {
+			this.mylike = mylike;
+		}
+		
+		@DynamoDBAttribute(attributeName = "person_id")
+		public Integer getPerson_id() {
+			return person_id;
+		}
+		public void setPerson_id(Integer person_id) {
+			this.person_id = person_id;
+		}
+		
+		@DynamoDBAttribute(attributeName = "post_id")
+		public Integer getPost_id() {
+			return post_id;
+		}
+		public void setPost_id(Integer post_id) {
+			this.post_id = post_id;
+		}
+		
+		@Override
+        public String toString() {
+            return "Like [id=" + id + ", date=" + date  + ", description=" +  description + ", mylike=" +  mylike + ", person_id=" + person_id + ", post_id=" + post_id + "]";
+        }
+		
 	}
+	
+    @DynamoDBTable(tableName = "ProductCatalog")
+    public static class CatalogItem {
+        private Integer id;
+        private String title;
+        private String ISBN;
+        private Set<String> bookAuthors;
 
+        // Partition key
+        @DynamoDBHashKey(attributeName = "id")
+        public Integer getId() {
+            return id;
+        }
+
+        public void setId(Integer id) {
+            this.id = id;
+        }
+
+        @DynamoDBAttribute(attributeName = "Title")
+        public String getTitle() {
+            return title;
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+        }
+
+        @DynamoDBAttribute(attributeName = "ISBN")
+        public String getISBN() {
+            return ISBN;
+        }
+
+        public void setISBN(String ISBN) {
+            this.ISBN = ISBN;
+        }
+
+        @DynamoDBAttribute(attributeName = "Authors")
+        public Set<String> getBookAuthors() {
+            return bookAuthors;
+        }
+
+        public void setBookAuthors(Set<String> bookAuthors) {
+            this.bookAuthors = bookAuthors;
+        }
+
+        @Override
+        public String toString() {
+            return "Book [ISBN=" + ISBN + ", bookAuthors=" + bookAuthors + ", id=" + id + ", title=" + title + "]";
+        }
+    }
+
+    private static void testCRUDOperationsLikes(AmazonDynamoDB ddb) {
+
+        LikesDynamoDB item = new LikesDynamoDB();
+
+        item.setId(3);
+        item.setDate("2019-04-02 12:00:00");
+        item.setDescription("Teste 3");
+        item.setMylike(1);
+        item.setPerson_id(1);
+        item.setPost_id(2);
+        
+        // Save the item (book).
+        DynamoDBMapper mapper = new DynamoDBMapper(ddb);
+        mapper.save(item);
+
+        // Retrieve the item.
+        LikesDynamoDB itemRetrieved = mapper.load(LikesDynamoDB.class, 3);
+        System.out.println("Item retrieved:");
+        System.out.println(itemRetrieved);
+
+        // Update the item.
+        itemRetrieved.setDate("2019-03-01 12:54:01");
+        itemRetrieved.setDescription("Teste 4");
+        mapper.save(itemRetrieved);
+        System.out.println("Item updated:");
+        System.out.println(itemRetrieved);
+
+        // Retrieve the updated item.
+        DynamoDBMapperConfig config = DynamoDBMapperConfig.builder()
+        						.withConsistentReads(DynamoDBMapperConfig.ConsistentReads.CONSISTENT)
+        						.build();
+
+        LikesDynamoDB updatedItem = mapper.load(LikesDynamoDB.class, 3, config);
+        System.out.println("Retrieved the previously updated item:");
+        System.out.println(updatedItem);
+        
+    }
+
+    private static void testCRUDOperationsProductCatalog(AmazonDynamoDB ddb) {
+
+        CatalogItem item = new CatalogItem();
+
+        item.setId(601);
+        item.setTitle("Book 601");
+        item.setISBN("611-1111111111");
+        item.setBookAuthors(new HashSet<String>(Arrays.asList("Author1", "Author2")));
+
+        // Save the item (book).
+        DynamoDBMapper mapper = new DynamoDBMapper(ddb);
+        mapper.save(item);
+
+        // Retrieve the item.
+        CatalogItem itemRetrieved = mapper.load(CatalogItem.class, 601);
+        System.out.println("Item retrieved:");
+        System.out.println(itemRetrieved);
+
+        // Update the item.
+        itemRetrieved.setISBN("622-2222222222");
+        itemRetrieved.setBookAuthors(new HashSet<String>(Arrays.asList("Author1", "Author3")));
+        mapper.save(itemRetrieved);
+        System.out.println("Item updated:");
+        System.out.println(itemRetrieved);
+
+        // Retrieve the updated item.
+        DynamoDBMapperConfig config = DynamoDBMapperConfig.builder()
+        						.withConsistentReads(DynamoDBMapperConfig.ConsistentReads.CONSISTENT)
+        						.build();
+
+        CatalogItem updatedItem = mapper.load(CatalogItem.class, 601, config);
+        System.out.println("Retrieved the previously updated item:");
+        System.out.println(updatedItem);
+
+        /*
+        // Delete the item.
+        mapper.delete(updatedItem);
+
+        // Try to retrieve deleted item.
+        CatalogItem deletedItem = mapper.load(CatalogItem.class, updatedItem.getId(), config);
+
+        if (deletedItem == null) {
+            System.out.println("Done - Sample item is deleted.");
+        }
+        */
+    }
+    
 	/**
 	 * Recupera todos os buckets do S3 na conta padrao do usuario logado
 	 */
@@ -157,7 +337,7 @@ public class AppTesteS3DynamoDB {
 	 * @param key_value valor
 	 * @param ddb instância do DynamoDB do cliente padrao
 	 */
-	private static void readItemFromTable(String tableName, String key, String key_value, AmazonDynamoDB ddb) {
+	private static void readItemFromTableKeyValueInt(String tableName, String key, int key_value, AmazonDynamoDB ddb) {
 		DynamoDB dynamoDB = new DynamoDB(ddb);
         Table table = dynamoDB.getTable(tableName);
         GetItemSpec spec = new GetItemSpec().withPrimaryKey(key, key_value);
@@ -173,4 +353,59 @@ public class AppTesteS3DynamoDB {
         }
 	}
 
+	private static void readItemFromTableKeyValueString(String tableName, String key, String key_value, AmazonDynamoDB ddb) {
+		DynamoDB dynamoDB = new DynamoDB(ddb);
+        Table table = dynamoDB.getTable(tableName);
+        GetItemSpec spec = new GetItemSpec().withPrimaryKey(key, key_value);
+
+        try {
+            System.out.println("Attempting to read the item...");
+            Item outcome = table.getItem(spec);
+            System.out.println("GetItem succeeded: " + outcome);
+        }
+        catch (Exception e) {
+            System.err.println("Unable to read item: " + key);
+            System.err.println(e.getMessage());
+        }
+	}
+	
+	public static void main(String[] args) {
+		AmazonS3 s3Client = AmazonS3ClientBuilder.standard()
+				.withRegion(Regions.US_EAST_1)
+				.withCredentials(new AWSStaticCredentialsProvider(awsCreds))
+				.build();
+
+		AmazonDynamoDB ddb = AmazonDynamoDBClientBuilder.standard()
+				.withRegion(Regions.US_EAST_1)
+				.withCredentials(new AWSStaticCredentialsProvider(awsCreds))
+				.build();
+
+		System.out.println("Your Amazon S3 buckets are:");
+		getBucketsFromS3(s3Client);
+		
+		System.out.println("------------------------");
+		System.out.println("Your DynamoDB tables:\n");
+		getTablesFromDynamoDB(ddb);
+		
+		System.out.println("------------------------");
+		System.out.println("Table description:");
+		getTableDescription(table_name, ddb);	
+		
+		System.out.println("------------------------");
+		System.out.format("Recovering item from Table %s\n", table_name);
+		readItemFromTableKeyValueString(table_name, "cliente_id", "1", ddb);
+		
+		System.out.println("------------------------");
+		System.out.format("Recovering item from Table %s\n", "ProductCatalog");
+		readItemFromTableKeyValueInt("ProductCatalog", "id", 1, ddb);
+		
+		System.out.println("------------------------");
+		System.out.println("Testando as operações de CRUD na tabela ProductCatalog");
+		testCRUDOperationsProductCatalog(ddb);
+
+		System.out.println("------------------------");
+		System.out.println("Testando as operações de CRUD na tabela Likes");
+		testCRUDOperationsLikes(ddb);
+	}
+	
 }
