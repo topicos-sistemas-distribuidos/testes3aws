@@ -9,5 +9,6 @@ public class Constantes {
 	public static String picturesDirectory = System.getProperty("user.dir") + FileSystems.getDefault().getSeparator() + "uploads" + FileSystems.getDefault().getSeparator() + "pictures";
 	public static String access_key_id = "";
 	public static String secret_key_id = "";
+	public static final String bucketPrincipal = null;
 
 }

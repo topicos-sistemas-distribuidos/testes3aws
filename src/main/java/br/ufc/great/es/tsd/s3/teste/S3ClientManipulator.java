@@ -7,10 +7,14 @@ import java.io.IOException;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.concurrent.Executors;
 
+import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.ClientConfiguration;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.event.ProgressListener;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
@@ -23,6 +27,9 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectInputStream;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
+import com.amazonaws.services.s3.transfer.Upload;
 
 import br.ufc.great.es.tsd.s3.teste.util.Constantes;
 
@@ -32,7 +39,7 @@ import br.ufc.great.es.tsd.s3.teste.util.Constantes;
  * @author armandosoaressousa
  *
  */
-public class S3ClientManipulator {
+public class S3ClientManipulator{
 	//Define as credenciais
 	private BasicAWSCredentials awsCreds;
 	
@@ -41,6 +48,9 @@ public class S3ClientManipulator {
 
 	//Define o bucket Principal (default)
 	private String bucketName;
+	
+	//Define a regiao do bucket Principal
+	private Regions region = Regions.US_EAST_1;
 
 	/**
 	 * Inicializa o manipulador de buckets com suas credenciais e um client default
@@ -48,19 +58,27 @@ public class S3ClientManipulator {
 	private void init() {
 		this.awsCreds = new BasicAWSCredentials(new Constantes().access_key_id, new Constantes().secret_key_id);
 		
+		ClientConfiguration clientConfiguration = new ClientConfiguration();
+	    clientConfiguration.setSignerOverride("AWSS3V4SignerType");
+
 		this.s3Client = AmazonS3ClientBuilder.standard()
-				.withRegion(Regions.US_EAST_1)
+				.withRegion(region)
                 .withCredentials(new AWSStaticCredentialsProvider(awsCreds))
+                .withClientConfiguration(clientConfiguration)
+                .withPathStyleAccessEnabled(true)
+                .withChunkedEncodingDisabled(true)
                 .build();
 	}
 
 	public S3ClientManipulator() {
+		this.bucketName = new Constantes().bucketPrincipal;
 		init();
 	}
 
-	public S3ClientManipulator(String bucketNamePrincipal) {
-		init();
+	public S3ClientManipulator(String bucketNamePrincipal, Regions region) {
 		this.bucketName = bucketNamePrincipal;
+		this.region = region;
+		init();
 	}
 	
 	public String getBucketName() {
@@ -115,6 +133,46 @@ public class S3ClientManipulator {
         String key_name = Paths.get(file_path).getFileName().toString();        
         s3Client.putObject(bucketName, key_name, new File(file_path));
 	}
+
+	/**
+	 * OK!
+	 * Salva um arquivo em um diretório especifico do bucket
+	 * @param file arquivo
+	 * @param destinationFolder diretorio destino do bucket
+	 */
+	public void uploadFile(File file, String destinationFolder) {
+        //Create a client
+        AmazonS3 s3Client = this.getS3Client();
+        //Concatenate the folder and file name to get the full destination path
+        String destinationPath = destinationFolder + file.getName();
+        //Create a PutObjectRequest
+        PutObjectRequest request = new PutObjectRequest(this.getBucketName(), destinationPath, file).withCannedAcl(CannedAccessControlList.PublicRead);
+        
+		int maxUploadThreads = 5;
+
+		TransferManager tm = TransferManagerBuilder
+				.standard()
+				.withS3Client(s3Client)
+				.withMultipartUploadThreshold((long) (5 * 1024 * 1024))
+				.withExecutorFactory(() -> Executors.newFixedThreadPool(maxUploadThreads))
+				.build();
+
+		ProgressListener progressListener =
+				progressEvent -> System.out.println("Transferred bytes: " + progressEvent.getBytesTransferred());
+				
+				request.setGeneralProgressListener(progressListener);
+
+				Upload upload = tm.upload(request);
+
+				try {
+					upload.waitForCompletion();
+					System.out.println("Upload complete.");
+				} catch (AmazonClientException | InterruptedException e) {
+					System.out.println("Error occurred while uploading file");
+					e.printStackTrace();
+				}
+
+    }
 	
 	/**
 	 * Faz o upload de imagem como um arquivo público do bucket definido na inicializacao
@@ -176,6 +234,14 @@ public class S3ClientManipulator {
 		AmazonS3Client s3Client = (AmazonS3Client)AmazonS3ClientBuilder.defaultClient();
 		
 		return s3Client.getUrl(this.bucketName, fileName);
+	}
+
+	public Regions getRegion() {
+		return region;
+	}
+
+	public void setRegion(Regions region) {
+		this.region = region;
 	}
 
 	
